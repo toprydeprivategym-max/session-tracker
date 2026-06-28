@@ -1,0 +1,7 @@
+# 常に最新を取得させる（古いキャッシュで画面が固まる問題を防ぐ）
+/index.html
+  Cache-Control: no-cache
+/data/session_data.js
+  Cache-Control: no-cache
+/
+  Cache-Control: no-cache

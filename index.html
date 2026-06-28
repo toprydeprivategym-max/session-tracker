@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>セッション本数把握君</title>
+<script src="data/session_data.js"></script>
+<style>
+:root {
+  --primary: #1a2744; --primary-mid: #2B3A67; --primary-light: #4A6FA5;
+  --accent: #E8F0FE; --green: #1B5E20; --green-light: #C8E6C9;
+  --orange: #E65100; --orange-light: #FFF3E0; --blue: #1565C0;
+  --blue-light: #E3F2FD; --bg: #f0f2f5; --white: #fff;
+  --shadow: 0 4px 24px rgba(0,0,0,0.07); --border: #e0e0e0; --danger: #c62828;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI','Hiragino Sans','Meiryo',sans-serif;background:var(--bg);color:#333;min-height:100vh}
+.screen{display:none}.screen.active{display:block}
+
+/* LOGIN */
+#loginScreen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;background:linear-gradient(135deg,#1a2744,#2d4a7a)}
+.login-box{background:var(--white);border-radius:20px;padding:48px 40px;box-shadow:0 8px 40px rgba(0,0,0,.2);max-width:440px;width:100%;text-align:center}
+.login-box .logo{font-size:44px;margin-bottom:8px}
+.login-box h1{color:var(--primary);font-size:22px;margin-bottom:4px}
+.login-box .subtitle{color:#888;font-size:13px;margin-bottom:28px}
+.login-box .user-badge{background:var(--accent);color:var(--primary);padding:14px;border-radius:10px;font-weight:bold;font-size:16px;margin-bottom:24px}
+.login-box input[type="password"]{width:100%;padding:14px 16px;border:2px solid var(--border);border-radius:10px;font-size:16px;margin-bottom:12px}
+.login-box input:focus{border-color:var(--primary-light);outline:none}
+.btn-login{width:100%;padding:14px;background:var(--primary-mid);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer}
+.btn-login:hover{background:var(--primary-light)}
+.login-error{color:var(--danger);font-size:13px;margin-top:8px;min-height:20px}
+
+/* LOADING OVERLAY */
+.loading-overlay{position:fixed;inset:0;background:rgba(26,39,68,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:9999}
+.loading-overlay.active{display:flex}
+.bb-photo{width:240px;max-width:64vw;border-radius:14px;box-shadow:0 10px 34px rgba(0,0,0,.55);object-fit:contain}
+.loading-overlay .msg{color:#fff;font-size:20px;letter-spacing:.04em;margin-top:18px;font-weight:bold}
+
+/* DASHBOARD */
+.dash{max-width:800px;margin:0 auto;padding:20px}
+.dash-header{background:linear-gradient(135deg,var(--primary),var(--primary-light));color:#fff;border-radius:16px;padding:24px 28px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.dash-header h1{font-size:18px}
+.dash-header .meta{font-size:12px;opacity:.8}
+.btn-sm{padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);color:#fff;font-size:12px;cursor:pointer}
+.btn-sm:hover{background:rgba(255,255,255,.22)}
+.month-nav{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:20px}
+.arrow{width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:var(--white);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.arrow:hover{background:var(--accent)}
+.current-month{font-size:20px;font-weight:bold;color:var(--primary);min-width:140px;text-align:center}
+.big-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+.big-card{padding:24px 16px;border-radius:14px;text-align:center;box-shadow:var(--shadow)}
+.big-card .num{font-size:42px;font-weight:bold;line-height:1.1}
+.big-card .lbl{font-size:12px;margin-top:4px;font-weight:bold}
+.c30-bg{background:var(--blue-light)}.c30-bg .num{color:var(--blue)}
+.c60-bg{background:var(--orange-light)}.c60-bg .num{color:var(--orange)}
+.ct-bg{background:var(--green-light)}.ct-bg .num{color:var(--green)}
+.card{background:var(--white);border-radius:14px;box-shadow:var(--shadow);padding:24px 28px;margin-bottom:20px}
+.card h3{color:var(--primary);font-size:16px;margin-bottom:14px}
+.chart-label{font-size:13px;color:#555;margin-bottom:4px;display:flex;justify-content:space-between}
+.chart-bar{height:28px;border-radius:6px;background:#eee;overflow:hidden;display:flex}
+.seg30{background:linear-gradient(90deg,#42a5f5,#1e88e5);height:100%;transition:width .5s}
+.seg60{background:linear-gradient(90deg,#ff9800,#ef6c00);height:100%;transition:width .5s}
+.badge-30{background:var(--blue-light);color:var(--blue);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold}
+.badge-60{background:var(--orange-light);color:var(--orange);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th{background:var(--primary);color:#fff;padding:10px 14px;text-align:center}
+.tbl th:first-child{border-radius:8px 0 0 0;text-align:left}
+.tbl th:last-child{border-radius:0 8px 0 0}
+.tbl td{padding:10px 14px;text-align:center;border-bottom:1px solid #eee}
+.tbl td:first-child{text-align:left}
+.c30{color:var(--blue);font-weight:bold}
+.c60{color:var(--orange);font-weight:bold}
+.ct{color:var(--green);font-weight:bold;font-size:16px}
+.no-data{text-align:center;color:#bbb;padding:40px;font-size:15px}
+.row-total{background:var(--accent);font-weight:bold}
+.row-grand{background:var(--green-light);font-weight:bold}
+.row-grand td{font-size:16px;border:none}
+.store-badge{display:inline-block;background:var(--primary-mid);color:#fff;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:bold;margin-right:4px}
+
+/* ADMIN */
+.admin{max-width:1100px;margin:0 auto;padding:20px}
+.admin-header{background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;border-radius:16px;padding:24px 28px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.admin-header h1{font-size:20px}
+.url-list{margin-top:16px}
+.url-item{display:flex;align-items:center;gap:10px;padding:8px 14px;background:#f8f9fa;border-radius:8px;margin-bottom:6px;flex-wrap:wrap;font-size:12px}
+.url-item strong{min-width:80px}
+.url-item .url-text{font-family:monospace;color:#555;word-break:break-all;flex:1}
+.url-item .pw{color:#999}
+.btn-copy{padding:3px 10px;background:var(--accent);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer}
+.btn-copy:hover{background:#d0e0f8}
+.btn{padding:12px 28px;border:none;border-radius:10px;font-size:14px;font-weight:bold;cursor:pointer}
+.btn-green{background:var(--green);color:#fff}.btn-green:hover{background:#2E7D32}
+.btn-refresh{background:var(--blue);color:#fff}.btn-refresh:hover{background:#1976D2}
+.btn-refresh.loading{opacity:.6;pointer-events:none}
+.btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+
+@media(max-width:600px){
+  .big-cards{grid-template-columns:1fr}
+  .login-box{padding:32px 20px}
+  .dash,.admin{padding:12px}
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loadingOverlay">
+  <img class="bb-photo" src="bodybuilder.jpg" alt="" onerror="this.style.display='none'">
+  <div class="msg">Loading Now...</div>
+</div>
+<script>(function(){try{var s=location.search;var adm=/[?&]mode=admin/.test(s)&&sessionStorage.getItem('gymsAdmin')==='1';if(/[?&]store=/.test(s)||adm){document.getElementById('loadingOverlay').classList.add('active');}}catch(e){}})();</script>
+
+<!-- LOGIN -->
+<div class="screen active" id="loginScreen">
+  <div class="login-box">
+    <div class="logo">📊</div>
+    <h1>セッション本数把握君</h1>
+    <p class="subtitle">月間セッション本数を自動算出</p>
+    <div class="user-badge" id="loginBadge">読み込み中...</div>
+    <select id="staffSelect" onchange="onSelChange()" style="display:none;width:100%;padding:14px 16px;border:2px solid #e0e0e0;border-radius:10px;font-size:15px;margin-bottom:12px;background:#fff;color:#333">
+      <option value="">-- 店舗・担当者を選択 --</option>
+    </select>
+    <input type="password" id="pwInput" placeholder="パスワードを入力" autocomplete="off">
+    <button class="btn-login" onclick="doLogin()">ログイン</button>
+    <div class="login-error" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- STAFF DASHBOARD -->
+<div class="screen" id="staffScreen">
+  <div class="dash">
+    <div class="dash-header">
+      <div><h1 id="staffTitle"></h1><div class="meta" id="staffMeta"></div></div>
+      <button class="btn-sm" onclick="doLogout()">ログアウト</button>
+    </div>
+    <div class="month-nav">
+      <button class="arrow" onclick="changeMonth(-1)">◀</button>
+      <div class="current-month" id="currentMonth"></div>
+      <button class="arrow" onclick="changeMonth(1)">▶</button>
+    </div>
+    <div class="big-cards">
+      <div class="big-card c30-bg"><div class="num" id="val30">-</div><div class="lbl">30分セッション</div></div>
+      <div class="big-card c60-bg"><div class="num" id="val60">-</div><div class="lbl">60分セッション</div></div>
+      <div class="big-card ct-bg"><div class="num" id="valTotal">-</div><div class="lbl">合計</div></div>
+    </div>
+    <div class="card"><h3>内訳</h3><div id="barChart"></div></div>
+    <div class="card">
+      <h3>月別推移</h3>
+      <table class="tbl"><thead><tr><th>月</th><th>30分</th><th>60分</th><th>合計</th></tr></thead><tbody id="historyBody"></tbody></table>
+    </div>
+    <div class="card">
+      <h3>月間セッション本数ランキング（当月・60分換算 / 60分=1本・30分=0.5本）</h3>
+      <div id="staffRanking"></div>
+    </div>
+    <div class="card">
+      <h3>継続率・入会率</h3>
+      <div id="staffKpi"></div>
+    </div>
+    <div class="card">
+      <h3>来店率・当日キャンセル率（当月）</h3>
+      <div id="staffRate"></div>
+    </div>
+    <div class="card">
+      <h3>セッション稼働率（当月）</h3>
+      <div id="staffUtil"></div>
+    </div>
+    <div class="card">
+      <h3>当日キャンセル明細（当月）<span id="staffCancelCount" style="font-size:13px;color:#888;font-weight:normal"></span></h3>
+      <table class="tbl"><thead><tr><th>日付</th><th>時間</th><th>顧客名</th><th>種別</th><th>キャンセル日時</th></tr></thead><tbody id="staffCancelBody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div class="screen" id="adminScreen">
+  <div class="admin">
+    <div class="admin-header">
+      <div><h1>管理者ダッシュボード</h1><div style="font-size:12px;opacity:.7">全店舗のセッション本数を一覧表示</div></div>
+      <button class="btn-sm" onclick="doLogout()">ログアウト</button>
+    </div>
+    <div class="month-nav" style="margin-bottom:16px">
+      <button class="arrow" onclick="adminChangeMonth(-1)">◀</button>
+      <div class="current-month" id="adminMonth"></div>
+      <button class="arrow" onclick="adminChangeMonth(1)">▶</button>
+    </div>
+    <div id="adminResultContent"></div>
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="adminExportCSV()">CSV出力</button>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <h3>各責任者のURL一覧（共有用）</h3>
+      <p style="font-size:12px;color:#888;margin-bottom:12px">各責任者にそれぞれのURLを共有してください。パスワードは「名前ローマ字（小文字）」です。</p>
+      <div id="urlList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ======================================================================
+// CONFIG: 店舗・責任者情報
+// ======================================================================
+const CONFIG = {
+  stores: [
+    { id:"kawanishi-annex", name:"パーソナルジムTop Ryde 川西能勢口ANNEX店", staff:[
+      {id:"ukai",name:"鵜飼晃",romaji:"ukaiakira"}
+    ]},
+    { id:"kawanishi", name:"パーソナルジムTop Ryde 川西能勢口店", staff:[
+      {id:"soranaka",name:"空中泰樹",romaji:"soranakataiki"}
+    ]},
+    { id:"ikeda", name:"パーソナルジムTop Ryde 阪急池田店", staff:[
+      {id:"taguchi",name:"田口美紀",romaji:"taguchimiki"}
+    ]},
+    { id:"ibaraki", name:"パーソナルジムTop Ryde 茨木市駅前店", staff:[
+      {id:"yano",name:"矢野利佳",romaji:"yanorika"}
+    ]},
+    { id:"nishinomiya", name:"パーソナルジムTop Ryde 阪神西宮店", staff:[
+      {id:"ashida",name:"芦田崚馬",romaji:"ashidaryoma"}
+    ]},
+    { id:"fp-ikeda", name:"ファーストピラティス池田店", staff:[
+      {id:"iki",name:"壹岐和恵",romaji:"ikikazue"}
+    ]},
+    { id:"fp-ibaraki", name:"ファーストピラティス茨木市駅前店", staff:[
+      {id:"yagi",name:"屋宜広紀",romaji:"yagihiroki"}
+    ]},
+    { id:"fp-nakamozu", name:"ファーストピラティス中百舌鳥店", staff:[
+      {id:"nagahama",name:"長濱心花音",romaji:"nagahamakohane"}
+    ]}
+  ],
+  adminPassword: "admin2026"
+};
+
+let currentUser = null;
+let isAdmin = false;
+let viewYear, viewMonth, adminViewYear, adminViewMonth;
+
+function getParams(){
+  const p=new URLSearchParams(location.search);
+  return{store:p.get('store'),staff:p.get('staff'),mode:p.get('mode')};
+}
+
+// ======================================================================
+// DATA ACCESS: session_data.js から読み込み
+// ======================================================================
+function getData(storeName, staffName, year, month){
+  if(!window.SESSION_DATA) return null;
+  const yearData = SESSION_DATA[year];
+  if(!yearData) return null;
+  const monthData = yearData[month];
+  if(!monthData) return null;
+  const storeData = monthData[storeName];
+  if(!storeData) return null;
+  return storeData[staffName] || null;
+}
+
+function getAllMonths(storeName, staffName){
+  if(!window.SESSION_DATA) return [];
+  const results = [];
+  Object.keys(SESSION_DATA).forEach(y => {
+    const year = parseInt(y);
+    Object.keys(SESSION_DATA[year]).forEach(m => {
+      const month = parseInt(m);
+      const d = getData(storeName, staffName, year, month);
+      if(d) results.push({year, month, s30: d.s30||0, s60: d.s60||0});
+    });
+  });
+  return results;
+}
+
+// ======================================================================
+// INIT
+// ======================================================================
+let useSelector = false; // URLパラメータなし → セレクター表示モード
+
+window.addEventListener('DOMContentLoaded', () => {
+  const p = getParams();
+  const badge = document.getElementById('loginBadge');
+  const sel = document.getElementById('staffSelect');
+
+  if(p.mode==='admin'){
+    hideLoading();
+    badge.textContent='🔒 管理者ログイン';
+    sel.style.display='none';
+    document.getElementById('pwInput').style.display='block';
+    return;
+  }
+
+  if(p.store && p.staff){
+    const store=CONFIG.stores.find(s=>s.id===p.store);
+    const staff=store?.staff.find(s=>s.id===p.staff);
+    if(!store||!staff){hideLoading();badge.textContent='ユーザーが見つかりません';return}
+    openStaff(p.store,p.staff); // 個別URL → パスワード不要で表示
+    return;
+  }
+
+  // URLパラメータなし → 選択式ログイン
+  useSelector = true;
+  badge.textContent='店舗・担当者を選んでログイン';
+  sel.style.display='block';
+  CONFIG.stores.forEach(store=>{
+    store.staff.forEach(staff=>{
+      const opt=document.createElement('option');
+      opt.value=store.id+'|'+staff.id;
+      opt.textContent=store.name+'　'+staff.name;
+      sel.appendChild(opt);
+    });
+  });
+  // 管理者オプション
+  const adminOpt=document.createElement('option');
+  adminOpt.value='admin';adminOpt.textContent='🔒 管理者ログイン';
+  sel.appendChild(adminOpt);
+  document.getElementById('pwInput').style.display='none'; // 担当者選択は不要。管理者選択時のみ表示
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&document.getElementById('loginScreen').classList.contains('active'))doLogin();
+});
+
+// ======================================================================
+// LOGIN
+// ======================================================================
+function doLogin(){
+  const pw=document.getElementById('pwInput').value.trim();
+  const p=getParams();
+  const err=document.getElementById('loginErr');
+
+  // 管理者ログイン（URL or セレクター）
+  if(p.mode==='admin' || (useSelector && document.getElementById('staffSelect').value==='admin')){
+    if(pw===CONFIG.adminPassword){openAdmin();}
+    else err.textContent='パスワードが違います';
+    return;
+  }
+
+  if(useSelector){
+    const val=document.getElementById('staffSelect').value;
+    if(!val){err.textContent='店舗・担当者を選択してください';return}
+    const [storeId, staffId]=val.split('|');
+    openStaff(storeId,staffId);
+    return;
+  }
+
+  // 個別URL直叩きのフォールバック
+  const store=CONFIG.stores.find(s=>s.id===p.store);
+  const staff=store?.staff.find(s=>s.id===p.staff);
+  if(!store||!staff){err.textContent='ユーザーが見つかりません';return}
+  openStaff(p.store,p.staff);
+}
+
+function onSelChange(){
+  const v=document.getElementById('staffSelect').value;
+  const pwEl=document.getElementById('pwInput');
+  document.getElementById('loginErr').textContent='';
+  if(v==='admin'){pwEl.style.display='block';pwEl.value='';pwEl.focus();return;}
+  pwEl.style.display='none';
+  if(v){ const [storeId,staffId]=v.split('|'); openStaff(storeId,staffId); } // 担当者選択 → ローディング表示して表示
+}
+
+function doLogout(){
+  currentUser=null;isAdmin=false;
+  var sel=document.getElementById('staffSelect');if(sel)sel.value='';
+  var pw=document.getElementById('pwInput');if(pw){pw.value='';pw.style.display='none';}
+  document.getElementById('loginErr').textContent='';
+  hideLoading();
+  showScreen('loginScreen');
+}
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function hideLoading(){const o=document.getElementById('loadingOverlay');if(o)o.classList.remove('active');}
+var LOADING_MIN_MS=1600;
+function showLoading(msg){const o=document.getElementById('loadingOverlay');if(o){if(msg)o.querySelector('.msg').textContent=msg;o.classList.add('active');}}
+function openStaff(storeId,staffId){
+  const store=CONFIG.stores.find(s=>s.id===storeId);
+  const staff=store&&store.staff.find(s=>s.id===staffId);
+  if(!store||!staff){document.getElementById('loginErr').textContent='ユーザーが見つかりません';return;}
+  currentUser={storeId:store.id,storeName:store.name,staffId:staff.id,staffName:staff.name};
+  showLoading('Loading Now...');
+  setTimeout(function(){showScreen('staffScreen');initStaffDash();hideLoading();},LOADING_MIN_MS);
+}
+function openAdmin(){
+  isAdmin=true;
+  showLoading('Loading Now...');
+  setTimeout(function(){showScreen('adminScreen');initAdmin();hideLoading();},LOADING_MIN_MS);
+}
+
+// ======================================================================
+// STAFF DASHBOARD
+// ======================================================================
+function initStaffDash(){
+  const now=new Date();viewYear=now.getFullYear();viewMonth=now.getMonth()+1;
+  document.getElementById('staffTitle').textContent=`${currentUser.staffName}さんのセッション本数`;
+  document.getElementById('staffMeta').textContent=currentUser.storeName;
+  renderMonth();renderHistory();
+}
+
+function changeMonth(d){
+  viewMonth+=d;
+  if(viewMonth>12){viewMonth=1;viewYear++}
+  if(viewMonth<1){viewMonth=12;viewYear--}
+  renderMonth();
+}
+
+function renderMonth(){
+  document.getElementById('currentMonth').textContent=`${viewYear}年${viewMonth}月`;
+  renderStaffCancel();
+  renderStaffKpi();
+  renderStaffRate();
+  renderStaffUtil();
+  renderStaffRanking();
+  const d=getData(currentUser.storeName,currentUser.staffName,viewYear,viewMonth);
+  const s30=d?d.s30:0, s60=d?d.s60:0;
+  document.getElementById('val30').textContent=d?s30:'-';
+  document.getElementById('val60').textContent=d?s60:'-';
+  document.getElementById('valTotal').textContent=d?(s30+s60):'-';
+
+  const bar=document.getElementById('barChart');
+  if(!d||s30+s60===0){bar.innerHTML='<div class="no-data">この月のデータはまだありません</div>';return}
+  const total=s30+s60, p30=Math.round(s30/total*100), p60=100-p30;
+  bar.innerHTML=`<div><div class="chart-label"><span><span class="badge-30">30分</span> ${s30}本 (${p30}%)</span><span><span class="badge-60">60分</span> ${s60}本 (${p60}%)</span></div><div class="chart-bar"><div class="seg30" style="width:${p30}%"></div><div class="seg60" style="width:${p60}%"></div></div></div>`;
+}
+
+function renderHistory(){
+  const tbody=document.getElementById('historyBody');
+  const all=getAllMonths(currentUser.storeName,currentUser.staffName);
+  if(!all.length){tbody.innerHTML='<tr><td colspan="4" class="no-data">データがありません</td></tr>';return}
+  all.sort((a,b)=>(b.year*100+b.month)-(a.year*100+a.month));
+  tbody.innerHTML=all.map(d=>`<tr><td>${d.year}年${d.month}月</td><td class="c30">${d.s30}</td><td class="c60">${d.s60}</td><td class="ct">${d.s30+d.s60}</td></tr>`).join('');
+}
+
+// ======================================================================
+// ADMIN
+// ======================================================================
+function initAdmin(){
+  const now=new Date();adminViewYear=now.getFullYear();adminViewMonth=now.getMonth()+1;
+  renderAdmin();renderURLList();
+}
+
+function adminChangeMonth(d){
+  adminViewMonth+=d;
+  if(adminViewMonth>12){adminViewMonth=1;adminViewYear++}
+  if(adminViewMonth<1){adminViewMonth=12;adminViewYear--}
+  renderAdmin();
+}
+
+function renderAdmin(){
+  document.getElementById('adminMonth').textContent=`${adminViewYear}年${adminViewMonth}月`;
+  const c=document.getElementById('adminResultContent');c.innerHTML='';
+  c.innerHTML+=`<div class="card"><h3>月間セッション本数ランキング（${adminViewMonth}月・60分換算 / 60分=1本・30分=0.5本）</h3>${rankingTable(adminViewYear,adminViewMonth,null)}</div>`;
+  let grand30=0,grand60=0;
+
+  CONFIG.stores.forEach(store=>{
+    let st30=0,st60=0,rows='';
+    store.staff.forEach(staff=>{
+      const d=getData(store.name,staff.name,adminViewYear,adminViewMonth);
+      const s30=d?d.s30:0, s60=d?d.s60:0;
+      st30+=s30;st60+=s60;
+      rows+=`<tr><td>${esc(staff.name)}</td><td class="c30">${s30}</td><td class="c60">${s60}</td><td class="ct">${s30+s60}</td></tr>`;
+    });
+    grand30+=st30;grand60+=st60;
+    rows+=`<tr class="row-total"><td><span class="store-badge">${esc(store.name)}</span>合計</td><td class="c30">${st30}</td><td class="c60">${st60}</td><td class="ct">${st30+st60}</td></tr>`;
+    c.innerHTML+=`<div class="card"><h3>${esc(store.name)}</h3><table class="tbl"><thead><tr><th>担当者</th><th>30分</th><th>60分</th><th>合計</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  });
+
+  c.innerHTML+=`<div class="card"><table class="tbl"><tbody><tr class="row-grand"><td>全店舗合計</td><td class="c30">${grand30}</td><td class="c60">${grand60}</td><td class="ct">${grand30+grand60}</td></tr></tbody></table></div>`;
+  renderAdminUtil(c);
+  renderAdminRate(c);
+  renderAdminKpi(c);
+  renderAdminCancel(c);
+}
+
+function renderURLList(){
+  const c=document.getElementById('urlList');c.innerHTML='';
+  const base=location.origin+location.pathname;
+  CONFIG.stores.forEach(store=>{
+    store.staff.forEach(staff=>{
+      const url=`${base}?store=${store.id}&staff=${staff.id}`;
+      c.innerHTML+=`<div class="url-item"><span class="store-badge">${esc(store.name)}</span><strong>${esc(staff.name)}</strong><span class="url-text">${esc(url)}</span><span class="pw">PW: ${staff.romaji}</span><button class="btn-copy" onclick="navigator.clipboard.writeText('${url}').then(()=>this.textContent='OK!')">URLコピー</button></div>`;
+    });
+  });
+}
+
+function adminExportCSV(){
+  let csv='店舗,担当者,30分,60分,合計\n';
+  CONFIG.stores.forEach(store=>{
+    store.staff.forEach(staff=>{
+      const d=getData(store.name,staff.name,adminViewYear,adminViewMonth);
+      const s30=d?d.s30:0,s60=d?d.s60:0;
+      csv+=`"${store.name}","${staff.name}",${s30},${s60},${s30+s60}\n`;
+    });
+  });
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'}));
+  a.download=`セッション集計_${adminViewYear}年${adminViewMonth}月.csv`;a.click();
+}
+
+// ======================================================================
+// 当日キャンセル明細
+// ======================================================================
+function getCancels(year,month){
+  if(!window.CANCEL_DATA||!CANCEL_DATA[year])return[];
+  return CANCEL_DATA[year][month]||[];
+}
+function sortCancels(a){
+  return a.slice().sort((x,y)=>{
+    const dx=x.date.split('/').map(Number),dy=y.date.split('/').map(Number);
+    return (dx[0]-dy[0])||(dx[1]-dy[1])||x.time.localeCompare(y.time);
+  });
+}
+function shortStore(s){return s.replace('パーソナルジムTop Ryde ','').replace('ファーストピラティス','FP ');}
+function renderStaffCancel(){
+  const tb=document.getElementById('staffCancelBody');if(!tb||!currentUser)return;
+  const all=sortCancels(getCancels(viewYear,viewMonth).filter(c=>c.staff===currentUser.staffName));
+  const cnt=document.getElementById('staffCancelCount');if(cnt)cnt.textContent=' '+all.length+'件';
+  if(!all.length){tb.innerHTML='<tr><td colspan="5" class="no-data">当日キャンセルはありません</td></tr>';return;}
+  tb.innerHTML=all.map(c=>`<tr><td>${esc(c.date)}</td><td>${esc(c.time)}</td><td>${esc(c.name)}</td><td>${c.dur}分</td><td>${esc(c.cxlAt)}</td></tr>`).join('');
+}
+function renderAdminCancel(container){
+  const all=sortCancels(getCancels(adminViewYear,adminViewMonth));
+  const rows=all.length?all.map(c=>`<tr><td>${esc(c.staff)}</td><td><span class="store-badge">${esc(shortStore(c.store))}</span></td><td>${esc(c.date)}</td><td>${esc(c.time)}</td><td>${esc(c.name)}</td><td>${c.dur}分</td><td>${esc(c.cxlAt)}</td></tr>`).join(''):'<tr><td colspan="7" class="no-data">当日キャンセルはありません</td></tr>';
+  container.innerHTML+=`<div class="card"><h3>当日キャンセル明細（当月・全店舗 ${all.length}件）</h3><table class="tbl"><thead><tr><th>担当</th><th>店舗</th><th>日付</th><th>時間</th><th>顧客名</th><th>種別</th><th>キャンセル日時</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+// ======================================================================
+// 継続率・入会率
+// ======================================================================
+// ======================================================================
+// 月間セッション本数ランキング（役務消化=受講済み本数ベース）
+// ======================================================================
+function buildRanking(year,month){
+  const list=[];
+  CONFIG.stores.forEach(store=>store.staff.forEach(staff=>{const u=getUtil(year,month,staff.name);list.push({name:staff.name,store:store.name,val:u?u.hours:0});}));
+  list.sort((a,b)=>b.val-a.val);list.forEach((x,i)=>x.rank=i+1);return list;
+}
+function rankingTable(year,month,highlight){
+  if(!window.UTIL_DATA||!UTIL_DATA[year]||!UTIL_DATA[year][month])return '<div class="no-data">この月のデータはありません</div>';
+  const list=buildRanking(year,month);
+  const medal=r=>r===1?'🥇':r===2?'🥈':r===3?'🥉':r+'位';
+  const rows=list.map(x=>{const hl=(highlight&&x.name===highlight)?' style="background:var(--accent);font-weight:bold"':'';return `<tr${hl}><td style="text-align:center">${medal(x.rank)}</td><td>${esc(x.name)}</td><td><span class="store-badge">${esc(shortStore(x.store))}</span></td><td class="ct">${x.val}本</td></tr>`;}).join('');
+  return `<table class="tbl"><thead><tr><th>順位</th><th>担当</th><th>店舗</th><th>60分換算本数</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function renderStaffRanking(){
+  const el=document.getElementById('staffRanking');if(!el)return;
+  el.innerHTML=rankingTable(viewYear,viewMonth,currentUser&&currentUser.staffName);
+}
+function getUtil(y,m,staff){if(!window.UTIL_DATA||!UTIL_DATA[y]||!UTIL_DATA[y][m])return null;return UTIL_DATA[y][m][staff]||null;}
+function renderStaffUtil(){
+  const el=document.getElementById('staffUtil');if(!el||!currentUser)return;
+  const d=getUtil(viewYear,viewMonth,currentUser.staffName);const cap=(window.MAX_MONTHLY_HOURS||200);
+  if(!d){el.innerHTML='<div class="no-data">この月のデータはまだありません</div>';return;}
+  const rate=Math.round(d.hours/cap*100);
+  el.innerHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap"><div class="big-card c30-bg" style="flex:1;min-width:160px"><div class="num">${rate}%</div><div class="lbl">セッション稼働率</div><div style="font-size:11px;color:#555;margin-top:4px">実施${d.hours}h ÷ 目標${Math.round(cap)}h（月商120万円ライン）</div></div></div>`;
+}
+function renderAdminUtil(container){
+  const cap=(window.MAX_MONTHLY_HOURS||200);let rows='';
+  CONFIG.stores.forEach(store=>store.staff.forEach(staff=>{
+    const d=getUtil(adminViewYear,adminViewMonth,staff.name);
+    let rate='－',hrs='－';
+    if(d){rate=Math.round(d.hours/cap*100)+'%';hrs=d.hours+'h';}
+    rows+=`<tr><td>${esc(staff.name)}</td><td class="ct">${rate}</td><td>${hrs}</td></tr>`;
+  }));
+  container.innerHTML+=`<div class="card"><h3>セッション稼働率（${adminViewMonth}月／目標${Math.round(cap)}h=月商120万円ライン）</h3><table class="tbl"><thead><tr><th>担当</th><th>稼働率</th><th>実施時間</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function getRate(y,m,staff){if(!window.RATE_DATA||!RATE_DATA[y]||!RATE_DATA[y][m])return null;return RATE_DATA[y][m][staff]||null;}
+function renderStaffRate(){
+  const el=document.getElementById('staffRate');if(!el||!currentUser)return;
+  const d=getRate(viewYear,viewMonth,currentUser.staffName);
+  if(!d){el.innerHTML='<div class="no-data">この月のデータはまだありません</div>';return;}
+  const den=d.done+d.daycxl+d.cxl;
+  if(den===0){el.innerHTML='<div class="no-data">確定したセッションがありません</div>';return;}
+  const show=Math.round(d.done/den*100), dayc=Math.round(d.daycxl/den*100);
+  el.innerHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap"><div class="big-card ct-bg" style="flex:1;min-width:150px"><div class="num">${show}%</div><div class="lbl">来店率（消化率）</div><div style="font-size:11px;color:#555;margin-top:4px">実施${d.done}／確定${den}件</div></div><div class="big-card c60-bg" style="flex:1;min-width:150px"><div class="num">${dayc}%</div><div class="lbl">当日キャンセル率</div><div style="font-size:11px;color:#555;margin-top:4px">当日${d.daycxl}／確定${den}件</div></div></div>`;
+}
+function renderAdminRate(container){
+  let rows='';
+  CONFIG.stores.forEach(store=>store.staff.forEach(staff=>{
+    const d=getRate(adminViewYear,adminViewMonth,staff.name);
+    let showTxt='－',dayTxt='－',denTxt='0';
+    if(d){const den=d.done+d.daycxl+d.cxl;denTxt=den;if(den>0){showTxt=Math.round(d.done/den*100)+'%';dayTxt=Math.round(d.daycxl/den*100)+'%';}}
+    rows+=`<tr><td>${esc(staff.name)}</td><td class="ct">${showTxt}</td><td class="c60">${dayTxt}</td><td>${denTxt}</td></tr>`;
+  }));
+  container.innerHTML+=`<div class="card"><h3>来店率・当日キャンセル率（${adminViewMonth}月／確定セッション基準）</h3><table class="tbl"><thead><tr><th>担当</th><th>来店率</th><th>当キャン率</th><th>確定数</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function getRetention(y,m,staff){if(!window.RETENTION_DATA||!RETENTION_DATA[y]||!RETENTION_DATA[y][m])return null;return RETENTION_DATA[y][m][staff]||null;}
+function getConversion(staff){if(!window.CONVERSION_DATA)return null;return CONVERSION_DATA[staff]||null;}
+function renderStaffKpi(){
+  const el=document.getElementById('staffKpi');if(!el||!currentUser)return;
+  const r=getRetention(viewYear,viewMonth,currentUser.staffName);
+  const cv=getConversion(currentUser.staffName);
+  const retHtml=r&&r.den>0?`<div class="num">${Math.round(r.num/r.den*100)}%</div><div class="lbl">月次継続率（${viewMonth}月）</div><div style="font-size:11px;color:#555;margin-top:4px">前月${r.den}人中${r.num}人が継続</div>`:`<div class="num">－</div><div class="lbl">月次継続率（${viewMonth}月）</div><div style="font-size:11px;color:#555;margin-top:4px">データ準備中</div>`;
+  const cvHtml=cv&&cv.cs>0?`<div class="num">${Math.round(cv.joined/cv.cs*100)}%</div><div class="lbl">体験→入会率（5〜6月）</div><div style="font-size:11px;color:#555;margin-top:4px">体験${cv.cs}人中${cv.joined}人が入会</div>`:`<div class="num">－</div><div class="lbl">体験→入会率（5〜6月）</div><div style="font-size:11px;color:#555;margin-top:4px">対象期間に体験なし</div>`;
+  el.innerHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap"><div class="big-card ct-bg" style="flex:1;min-width:150px">${retHtml}</div><div class="big-card c30-bg" style="flex:1;min-width:150px">${cvHtml}</div></div>`;
+}
+function renderAdminKpi(container){
+  let rows='';
+  CONFIG.stores.forEach(store=>store.staff.forEach(staff=>{
+    const r=getRetention(adminViewYear,adminViewMonth,staff.name);const cv=getConversion(staff.name);
+    const rTxt=r&&r.den>0?Math.round(r.num/r.den*100)+'% ('+r.num+'/'+r.den+')':'－';
+    const cTxt=cv&&cv.cs>0?Math.round(cv.joined/cv.cs*100)+'% ('+cv.joined+'/'+cv.cs+')':'－';
+    rows+=`<tr><td>${esc(staff.name)}</td><td class="ct">${rTxt}</td><td class="c30">${cTxt}</td></tr>`;
+  }));
+  container.innerHTML+=`<div class="card"><h3>継続率・入会率（継続率=${adminViewMonth}月の前月比／入会率=5〜6月）</h3><table class="tbl"><thead><tr><th>担当</th><th>月次継続率</th><th>体験→入会率</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+</script>
+</body>
+</html>
